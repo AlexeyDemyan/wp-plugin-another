@@ -15,6 +15,34 @@ class WordFilterPlugin
     function __construct()
     {
         add_action('admin_menu', array($this, 'pluginMenu'));
+        add_action('admin_init', array($this, 'settings'));
+        add_filter('the_content', array($this, 'filterLogic'));
+    }
+
+    function settings()
+    {
+        add_settings_section('replacement_text_section', null, null, 'word-filter-options');
+
+        register_setting('replacementFields', 'replacementText');
+
+        add_settings_field('replacementText', 'Replacement Text', array($this, 'replacementFieldHTML'), 'word-filter-options', 'replacement_text_section');
+    }
+
+    function replacementFieldHTML()
+    { ?>
+        <!-- Name has to match the setting -->
+        <input type="text" name="replacementText" value="<?php echo esc_attr(get_option('replacementText', '###')) ?>">
+        <p class="description">Leave blank to simply remove the filtered words</p>
+    <?php }
+
+    function filterLogic($content)
+    {
+        if (get_option('plugin_words_to_filter')) {
+            $badWords = explode(',', get_option('plugin_words_to_filter'));
+            $badWordsTrimmed = array_map('trim', $badWords);
+            return str_ireplace($badWordsTrimmed, esc_html(get_option('replacementText', '***')), $content);
+        }
+        return $content;
     }
 
     function pluginMenu()
@@ -36,18 +64,34 @@ class WordFilterPlugin
 
     function optionsSubPage()
     { ?>
-        sub page text
+        <div class="wrap">
+            <h1>Word Filter Options</h1>
+            <!-- options.php is enough for WP to know what to do -->
+            <form action="options.php" method="POST">
+                <?php
+                settings_errors();
+                // WP will sort of hook up to the fields in DB:
+                settings_fields('replacementFields');
+
+                // And then WP will loop through registered settings sections and fields:
+                do_settings_sections('word-filter-options');
+                submit_button();
+                ?>
+            </form>
+        </div>
         <?php }
 
     function handleForm()
     {
-        if (isset($_POST['filterNonce']) AND wp_verify_nonce($_POST['filterNonce'], 'saveFilterWords') and current_user_can('manage_options')) {
+        if (isset($_POST['filterNonce']) and wp_verify_nonce($_POST['filterNonce'], 'saveFilterWords') and current_user_can('manage_options')) {
             update_option('plugin_words_to_filter', sanitize_text_field($_POST['plugin_words_to_filter'])); ?>
             <div class="updated">
                 <p>Your filtered words were saved!</p>
             </div>
         <?php } else { ?>
-            <div class="error"><p>Sorry, you do not have permission to perform that action</p></div>
+            <div class="error">
+                <p>Sorry, you do not have permission to perform that action</p>
+            </div>
         <?php
         }
     }
